@@ -1,6 +1,12 @@
 package main 
 
-import "github.com/felipedreis/storage/ds"
+import (
+	"fmt"
+	
+	"github.com/felipedreis/dbinternals/ds"
+)
 
-func main(args []string) {
+func main() {
+	fmt.Printf("Hello")
+	ds.NewBTree(10)
 }
