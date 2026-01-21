@@ -1,3 +1,3 @@
-module storage
+module dbinternals
 
 go 1.23.1
