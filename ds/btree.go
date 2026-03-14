@@ -13,6 +13,7 @@ type Value struct {
 
 type Node struct {
 	leaf bool
+	parent *Node
 	keys []Key 
 	child []*Node 
 	values []Value
@@ -25,7 +26,7 @@ type BTree struct {
 	nodeSize int
 }
 
-func makeNode(leaf bool, nodeSize int) *Node {
+func makeNode(leaf bool, nodeSize int, parent *Node) *Node {
 	var values []Value = nil
 	var child []*Node = nil 
 
@@ -41,12 +42,13 @@ func makeNode(leaf bool, nodeSize int) *Node {
 		keys: make([]Key, nodeSize),
 		child: child, 
 		values: values,
+		parent: parent,
 	}
 }
 
 
 func NewBTree(nodeSize int) *BTree {
-	var rootNode = makeNode(false, nodeSize)
+	var rootNode = makeNode(false, nodeSize, nil)
 
 	return &BTree{
 		root: rootNode,
@@ -56,7 +58,37 @@ func NewBTree(nodeSize int) *BTree {
 	}
 }
 
-func (*BTree) Add(key Key, value []byte) {
+func (b *BTree) Add(key Key, value []byte) {
+	node, idx := find(b.root, key, true)
+
+	if node == nil {
+		// Tree is empty, add the first leaf bellow the root
+		node = makeNode(true, b.nodeSize, b.root)
+		node.insertAt(idx, key, value)
+		b.root.child[0] = node 
+	} else {
+		// found an existing leaf, add the value at the right position
+		nodeSize, error = node.insertAt(idx, key, value) 
+		
+		if error != nil {
+			fmt.Printf("Couldn't insert value in position %d", idx)
+		}
+
+		// if after write the nodeSize overflow the leaf node, split the node 
+		// and add it to it's parent  
+		for ; nodeSize > b.nodeSize && node != nil ; {
+			parent := node.parent
+
+			right, key = node.split()
+			
+			// find the key position in the parent node 
+			idx = find(parent, key, false)
+			nodeSize = parent.insertNode(idx, key, right)
+			node = parent
+		}
+
+		// TODO check if the root node has to split
+	}
 }
 
 func (*BTree) Remove(key Key) []byte {
@@ -67,7 +99,7 @@ func (*BTree) Find(key Key) []byte {
 	return make([]byte, 1)
 }
 
-func find(node *Node, key Key) (*Node, int) {
+func find(node *Node, key Key, descend boolean) (*Node, int) {
 	l := 0
 	r := len(node.keys)
 	for ; l != r; {
@@ -114,5 +146,40 @@ func (n *Node) insertAt(index int, key Key, val Value) (int, error) {
 	return len(n.keys), nil
 }
 
-func merge(left *Node, right *Node) {}
-func split (node *Node) {}
+func (n *Node) split(nodeSize int) (*Node, Key) {
+	right := makeNode(n.leaf, nodeSize, n.parent)
+	
+	mid := len(n.keys)/2
+
+	if n.leaf {
+		// copy mid keys and mid values
+		right.keys[0:] = n.keys[mid:]
+		right.values[0:] = n.values[mid:]
+
+		for i := mid; i < len(n.keys); i += 1 {
+			n.keys[i] = nil
+			n.value[i] = nil 
+		}
+
+		
+	} else {
+		// copy last k keys and last k + 1 child nodes
+		right.keys[0:] = n.keys[mid:]
+		right.child[0:] = n.child[mid:]
+		
+		for i := mid; i < len(n.keys); i += 1 {
+			n.keys[i] = nil
+			n.child[i] = nil 
+		}
+
+		n.keys = n.keys[:mid]
+		n.child = n.child[:mid]
+	}
+
+	return right, mid
+}
+
+func (n *Node) insertNode(index int, key Key, node *Node) int {
+	// TODO implement me
+	return 0
+}
