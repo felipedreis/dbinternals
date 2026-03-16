@@ -147,7 +147,7 @@ func binarySearch(node *Node, key Key) int {
 		} else if compare < 0 {
 			r = mid
 		} else {
-			return mid + 1
+			return mid
 		}
 	}
 
@@ -199,6 +199,10 @@ func (n *Node) split(nodeSize int) (*Node, Key) {
 		right.child = append(right.child, n.child[mid+1:]...)
 		n.keys = n.keys[:mid]
 		n.child = n.child[:mid+1]
+
+		for _, children := range right.child {
+			children.parent = right
+		}
 	}
 
 	return right, midKey
