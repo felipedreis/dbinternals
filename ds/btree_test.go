@@ -61,12 +61,22 @@ func TestBTree_Add(t *testing.T) {
 	// 3. Execution
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tree.Add(TestKey{k: tt.key}, &Value{v: []byte(tt.value)})
 
+			key := TestKey{k: tt.key}
+			value := Value{v: []byte(tt.value)}
+			tree.Add(key, value)
 			tree.Print()
 
-			if err := validateTree(tree.root); err != nil {
+			value, error := tree.Find(key)
 
+			if error != nil {
+				t.Errorf("Couldn't find value for key %v", key)
+			}
+
+			fmt.Printf("Value: %s\n", string(value.v))
+
+			if error = validateTree(tree.root); error != nil {
+				t.Errorf("Expected: %s", tt.name)
 			}
 
 		})

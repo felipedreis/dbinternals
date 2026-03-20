@@ -19,7 +19,7 @@ type Node struct {
 	parent *Node
 	keys   []Key
 	child  []*Node
-	values []*Value
+	values []Value
 }
 
 type BTree struct {
@@ -30,11 +30,11 @@ type BTree struct {
 }
 
 func makeNode(leaf bool, nodeSize int, parent *Node) *Node {
-	var values []*Value = nil
+	var values []Value = nil
 	var child []*Node = nil
 
 	if leaf {
-		values = make([]*Value, 0, nodeSize)
+		values = make([]Value, 0, nodeSize)
 	} else {
 		child = make([]*Node, 0, nodeSize+1)
 	}
@@ -59,7 +59,7 @@ func NewBTree(nodeSize int) *BTree {
 	}
 }
 
-func (b *BTree) Add(key Key, value *Value) {
+func (b *BTree) Add(key Key, value Value) {
 	node, idx := find(b.root, key)
 
 	if node == nil {
@@ -130,8 +130,14 @@ func (*BTree) Remove(key Key) []byte {
 	return make([]byte, 1)
 }
 
-func (*BTree) Find(key Key) Value {
-	return Value{v: nil}
+func (b *BTree) Find(key Key) (Value, error) {
+
+	node, idx := find(b.root, key)
+
+	if foundKey := node.keys[idx]; !node.leaf || foundKey.Compare(key) != 0 {
+		return Value{}, fmt.Errorf("Key %v not found", key)
+	}
+	return node.values[idx], nil
 }
 
 func binarySearch(node *Node, key Key) int {
@@ -163,7 +169,7 @@ func find(node *Node, key Key) (*Node, int) {
 	return find(node.child[idx], key)
 }
 
-func (n *Node) insertAt(index int, key Key, val *Value) (int, error) {
+func (n *Node) insertAt(index int, key Key, val Value) (int, error) {
 	if !n.leaf {
 		return 0, errors.New("Only insert values at leaf nodes")
 	}
