@@ -3,6 +3,7 @@ package ds
 import (
 	"errors"
 	"fmt"
+	"math/rand/v2"
 	"strconv"
 	"testing"
 )
@@ -76,11 +77,38 @@ func TestBTree_Add(t *testing.T) {
 			fmt.Printf("Value: %s\n", string(value.v))
 
 			if error = validateTree(tree.root); error != nil {
-				t.Errorf("Expected: %s", tt.name)
+				t.Errorf("Expected: %s, Error %v\n", tt.name, error)
 			}
 
 		})
 	}
+}
+
+func TestBTree_Remove(t *testing.T) {
+	tree := NewBTree(5)
+	randVals := rand.Perm(100)
+	for _, i := range randVals {
+		testKey := TestKey{k: i}
+		testValue := Value{v: []byte("val" + strconv.Itoa(i))}
+		tree.Add(testKey, testValue)
+	}
+
+	tree.Print()
+
+	for i := range 100 {
+		testKey := TestKey{k: i}
+		_, error := tree.Remove(testKey)
+
+		if error != nil {
+			t.Errorf("Expected to remove key %v but got error %v", testKey, error)
+		}
+
+		if error := validateTree(tree.root); error != nil {
+			t.Errorf("Removing key %v got error %v", testKey, error)
+		}
+
+	}
+
 }
 
 func validateTree(node *Node) error {
@@ -101,9 +129,21 @@ func validateTree(node *Node) error {
 			continue
 		}
 		if children.parent != node {
-
 			errMsg := fmt.Sprintf("Inconsistent node parent relationship at node keys %v and index %d", children, i)
 			return errors.New(errMsg)
+		}
+
+		switch {
+		case i == 0 && children.left != nil:
+			return fmt.Errorf("Inconsistent left children at first node %v. Expected nil found %v",
+				children, children.left)
+		case i == len(node.child)-1 && children.right != nil:
+			return fmt.Errorf("Insconsistent right relation at last node  %v. Expected nil found %v",
+				children, children.right)
+		case i > 0 && children.left != node.child[i-1]:
+			return fmt.Errorf("Insconsistent left relation at node  %v idx %d", children, i)
+		case i < len(node.child)-1 && children.right != node.child[i+1]:
+			return fmt.Errorf("Insconsistent right relation at last node  %v idx %d", children, i)
 		}
 
 		if err := validateTree(children); err != nil {

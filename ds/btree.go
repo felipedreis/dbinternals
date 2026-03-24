@@ -20,7 +20,20 @@ type Node struct {
 	keys   []Key
 	child  []*Node
 	values []Value
+
+	left  *Node
+	right *Node
 }
+
+type NodeState int
+
+const (
+	NONE NodeState = iota
+	REBALANCE_LEFT
+	REBALANCE_RIGHT
+	MERGE_LEFT
+	MERGE_RIGHT
+)
 
 type BTree struct {
 	root     *Node
@@ -82,7 +95,6 @@ func (b *BTree) Add(key Key, value Value) {
 		log.Printf("Found node with keys %v empty position %d, creating new leaf node", node, idx)
 		newLeaf := makeNode(true, b.nodeSize, node)
 		newLeaf.insertAt(0, key, value)
-
 		nodeSize := node.insertNode(idx, key, newLeaf)
 		b.propagateSplit(node, nodeSize)
 	}
@@ -108,6 +120,11 @@ func (b *BTree) propagateSplit(node *Node, nodeSize int) {
 			newRoot.child = append(newRoot.child, splitNode)
 			newRoot.child = append(newRoot.child, right)
 
+			splitNode.right = right
+			right.left = splitNode
+			splitNode.left = nil
+			right.right = nil
+
 			splitNode.parent = newRoot
 			right.parent = newRoot
 			b.root = newRoot
@@ -126,15 +143,123 @@ func (b *BTree) propagateSplit(node *Node, nodeSize int) {
 	}
 }
 
-func (*BTree) Remove(key Key) []byte {
-	return make([]byte, 1)
+func (b *BTree) Remove(key Key) (Value, error) {
+	node, idx := find(b.root, key)
+
+	if !node.isAt(key, idx) {
+		return Value{}, fmt.Errorf("Key %v not found", key)
+	}
+
+	ret := node.remove(idx)
+
+	// early return, root node has no sibblings to merge/rebalance
+	if node == b.root {
+		return ret, nil
+	}
+
+	state := node.checkState(b.nodeSize)
+
+	switch state {
+	case REBALANCE_LEFT:
+		b.merge(node.left, node)
+	case REBALANCE_RIGHT:
+		b.rebalance(node, node.right)
+	case MERGE_LEFT:
+		b.merge(node.left, node)
+	case MERGE_RIGHT:
+		b.merge(node, node.right)
+	}
+
+	return ret, nil
+}
+
+func (b *BTree) merge(left *Node, right *Node) error {
+	if left.parent != right.parent {
+		return errors.New("Can't merge non sibbling nodes")
+	}
+
+	left.keys = append(left.keys, right.keys...)
+	left.values = append(left.values, right.values...)
+	left.right = right.right
+
+	parent := left.parent
+	keysCount := len(parent.keys)
+
+	idx := binarySearch(parent, right.keys[0])
+	// TODO fix this shit
+	copy(parent.keys[idx:], parent.keys[idx+1:]) // corner case if key is the last
+	copy(parent.child[i:], parent.child[i+1:])
+	parent.keys = parent.keys[:keysCount-1]
+	parent.child = parent.child[:keysCount]
+
+	return nil
+}
+
+func (b *BTree) rebalance(left *Node, right *Node) {}
+
+func (n *Node) remove(idx int) Value {
+	ret := n.values[idx]
+	lastIdx := len(n.keys) - 1
+	copy(n.keys[idx:], n.keys[idx+1:])
+	copy(n.values[idx:], n.values[idx+1:])
+	n.keys = n.keys[:lastIdx]
+	n.values = n.values[:lastIdx]
+	return ret
+}
+
+func (n *Node) checkState(nodeSize int) NodeState {
+
+	var state NodeState = NONE
+	var leftKeysCount int
+	var rightKeysCount int
+	keysCount := len(n.keys)
+
+	switch {
+	case n.right == nil && n.left != nil:
+		leftKeysCount = len(n.left.keys)
+		if keysCount+leftKeysCount < nodeSize {
+			state = MERGE_LEFT
+		} else {
+			state = REBALANCE_LEFT
+		}
+	case n.left == nil && n.right != nil:
+		rightKeysCount = len(n.right.keys)
+
+		if keysCount+rightKeysCount < nodeSize {
+			state = MERGE_RIGHT
+		} else {
+			state = REBALANCE_RIGHT
+		}
+	default:
+		leftKeysCount = len(n.left.keys)
+		rightKeysCount = len(n.right.keys)
+
+		switch {
+		case leftKeysCount+keysCount < nodeSize:
+			state = MERGE_LEFT
+		case rightKeysCount+keysCount < nodeSize:
+			state = MERGE_RIGHT
+		case leftKeysCount >= rightKeysCount:
+			state = REBALANCE_LEFT
+		default:
+			state = REBALANCE_RIGHT
+		}
+	}
+
+	return state
+}
+
+func (n *Node) isAt(key Key, index int) bool {
+	keyAtIndex := n.keys[index]
+
+	return n.leaf && keyAtIndex.Compare(key) == 0
 }
 
 func (b *BTree) Find(key Key) (Value, error) {
 
 	node, idx := find(b.root, key)
 
-	if foundKey := node.keys[idx]; !node.leaf || foundKey.Compare(key) != 0 {
+	if !node.isAt(key, idx) {
 		return Value{}, fmt.Errorf("Key %v not found", key)
 	}
 	return node.values[idx], nil
@@ -209,6 +334,9 @@ func (n *Node) split(nodeSize int) (*Node, Key) {
 		for _, children := range right.child {
 			children.parent = right
 		}
+
+		n.child[len(n.child)-1].right = nil
+		right.child[0].left = nil
 	}
 
 	return right, midKey
@@ -221,6 +349,16 @@ func (n *Node) insertNode(index int, key Key, node *Node) int {
 	copy(n.child[index+2:], n.child[index+1:])
 	n.keys[index] = key
 	n.child[index+1] = node
+
+	n.child[index].right = node
+	node.left = n.child[index]
+
+	if index+2 < len(n.child) {
+		n.child[index+2].left = node
+		node.right = n.child[index+2]
+	} else {
+		node.right = nil
+	}
 
 	return len(n.keys)
 }
