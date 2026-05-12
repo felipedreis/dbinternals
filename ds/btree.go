@@ -188,7 +188,7 @@ func (b *BTree) merge(left *Node, right *Node) error {
 	idx := binarySearch(parent, right.keys[0])
 	// TODO fix this shit
 	copy(parent.keys[idx:], parent.keys[idx+1:]) // corner case if key is the last
-	copy(parent.child[i:], parent.child[i+1:])
+	copy(parent.child[idx:], parent.child[idx+1:])
 	parent.keys = parent.keys[:keysCount-1]
 	parent.child = parent.child[:keysCount]
 
