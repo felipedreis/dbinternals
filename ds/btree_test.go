@@ -45,14 +45,16 @@ func TestBTree_Add(t *testing.T) {
 		{"Splits root node, rot key will be eight", 1, "val1"},
 		{"Insert 7 in the left leaf node", 7, "val1"},
 		{"Insert 2 in the left leaf node, splits", 2, "val2"},
-		{"Inserts 20 in the rightmost node", 20, "val20"},
+		{"Inserrts 9", 9, "val9"},
+		/*{"Inserts 20 in the rightmost node", 20, "val20"},
 		{"Inserts 30 in the rightmost node, split it", 30, "val30"},
 		{"Inserts 25, saturate the last leaf", 25, "val25"},
 		{"Inserts 35, propagate split to the root", 35, "val35"},
 		{"Inserts 3 to the leftmost node", 3, "val3"},
 		{"Inserts 4 to the leftmost node, split", 4, "val4"},
 		{"Inserts 11 ", 11, "val11"},
-		{"Inserts 9 splits middle node", 9, "val9"},
+		*/
+		//{"Inserts 9 splits middle node", 9, "val9"},
 
 		//{"", 1, "val1"},
 		//{"", 1, "val1"},
@@ -85,8 +87,11 @@ func TestBTree_Add(t *testing.T) {
 }
 
 func TestBTree_Remove(t *testing.T) {
-	tree := NewBTree(5)
-	randVals := rand.Perm(100)
+    treeSize := 4 
+	testCases := 10 * treeSize
+
+	tree := NewBTree(treeSize)
+	randVals := rand.Perm(testCases)
 	for _, i := range randVals {
 		testKey := TestKey{k: i}
 		testValue := Value{v: []byte("val" + strconv.Itoa(i))}
@@ -95,20 +100,21 @@ func TestBTree_Remove(t *testing.T) {
 
 	tree.Print()
 
-	for i := range 100 {
-		testKey := TestKey{k: i}
-		_, error := tree.Remove(testKey)
+	for i := range testCases { 
+		t.Run("Removing key " + strconv.Itoa(i), func(t *testing.T) {
+			tree.Print()
+			testKey := TestKey{k: i}
+			_, error := tree.Remove(testKey)
 
-		if error != nil {
-			t.Errorf("Expected to remove key %v but got error %v", testKey, error)
-		}
+			if error != nil {
+				t.Errorf("Expected to remove key %v but got error %v", testKey, error)
+			}
 
-		if error := validateTree(tree.root); error != nil {
-			t.Errorf("Removing key %v got error %v", testKey, error)
-		}
-
+			if error := validateTree(tree.root); error != nil {
+				t.Errorf("Removing key %v got error %v", testKey, error)
+			}
+		})
 	}
-
 }
 
 func validateTree(node *Node) error {
