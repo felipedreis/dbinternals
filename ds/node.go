@@ -74,11 +74,12 @@ func binarySearch(node *Node, key Key) int {
 		mid := (l + r) / 2
 
 		compare := key.Compare(node.keys[mid])
-		if compare > 0 {
+		switch {
+		case compare > 0: 
 			l = mid + 1
-		} else if compare < 0 {
+		case compare < 0:
 			r = mid
-		} else {
+		default: 
 			return mid
 		}
 	}
@@ -90,16 +91,19 @@ func (n *Node) getSibblings() (int, *Node, *Node) {
 	var left *Node 
 	var right *Node
 	parent := n.parent
-	
+	var nodeIdx int 
+
 	if parent == nil || n.isEmpty() {
 		return -1, nil, nil
 	}
 	
-	nodeIdx := binarySearch(parent, n.keys[0])
 	
-	if parent.child[nodeIdx] != n {
-		nodeIdx--
-	} 
+	for i, children := range parent.child {
+		if children == n {
+			nodeIdx = i 
+			break
+		}	
+	}
 
 	if nodeIdx > 0 {
 		left = parent.child[nodeIdx- 1]

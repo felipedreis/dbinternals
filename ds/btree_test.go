@@ -86,12 +86,73 @@ func TestBTree_Add(t *testing.T) {
 	}
 }
 
-func TestBTree_Remove(t *testing.T) {
-    treeSize := 4 
-	testCases := 10 * treeSize
+const TREE_SIZE int = 4
+const TEST_CASES int = 5 * TREE_SIZE
 
-	tree := NewBTree(treeSize)
-	randVals := rand.Perm(testCases)
+func TestBTree_RemoveIncreasingOrder(t *testing.T) {
+	tree := getRandomTree(TREE_SIZE, TEST_CASES)
+	
+	if e := validateTree(tree.root); e != nil {
+		t.Errorf("Tree was not constructed correctly: %v", e)
+	}
+
+	for i := range TEST_CASES { 
+		t.Run("Removing key " + strconv.Itoa(i), func(t *testing.T) {
+			testKey := TestKey{k: i}
+			removeOneElement(tree, testKey, t)
+		})
+	}
+}
+
+func TestBTree_RemoveDecreasingOder(t *testing.T) {
+	tree := getRandomTree(TREE_SIZE, TEST_CASES)
+	
+	if e := validateTree(tree.root); e != nil {
+		t.Errorf("Tree was not constructed correctly: %v", e)
+	}
+	
+	for i := TEST_CASES; i >= 0; i-- { 
+		t.Run("Removing key " + strconv.Itoa(i), func(t *testing.T) {
+			testKey := TestKey{k: i}
+			removeOneElement(tree, testKey, t)
+		})
+	}
+}
+
+
+func TestBTree_RemoveInRandomOrder(t *testing.T) {
+	tree := getRandomTree(TREE_SIZE, TEST_CASES)
+
+	if e := validateTree(tree.root); e != nil {
+		t.Errorf("Tree was not constructed correctly: %v", e)
+	}
+
+	randRemoves := rand.Perm(TEST_CASES)
+
+	for _, i := range randRemoves {
+		t.Run("Removing key " + strconv.Itoa(i), func(t *testing.T) {
+			testKey := TestKey{k: i}
+			removeOneElement(tree, testKey, t)
+		})
+	}
+}
+
+func removeOneElement(tree *BTree, testKey Key, t *testing.T) {
+	tree.Print()
+	_, error := tree.Remove(testKey)
+
+	if error != nil {
+		t.Errorf("Expected to remove key %v but got error %v", testKey, error)
+	}
+
+	if error := validateTree(tree.root); error != nil {
+		t.Errorf("Removing key %v got error %v", testKey, error)
+	}
+}
+
+func getRandomTree(nodeSize int, elements int) *BTree {
+	tree := NewBTree(nodeSize)
+	randVals := rand.Perm(elements)
 	for _, i := range randVals {
 		testKey := TestKey{k: i}
 		testValue := Value{v: []byte("val" + strconv.Itoa(i))}
@@ -100,21 +161,7 @@ func TestBTree_Remove(t *testing.T) {
 
 	tree.Print()
 
-	for i := range testCases { 
-		t.Run("Removing key " + strconv.Itoa(i), func(t *testing.T) {
-			tree.Print()
-			testKey := TestKey{k: i}
-			_, error := tree.Remove(testKey)
-
-			if error != nil {
-				t.Errorf("Expected to remove key %v but got error %v", testKey, error)
-			}
-
-			if error := validateTree(tree.root); error != nil {
-				t.Errorf("Removing key %v got error %v", testKey, error)
-			}
-		})
-	}
+	return tree
 }
 
 func validateTree(node *Node) error {
@@ -139,18 +186,20 @@ func validateTree(node *Node) error {
 			return errors.New(errMsg)
 		}
 
-		switch {
-		case i == 0 && children.left != nil:
-			return fmt.Errorf("Inconsistent left children at first node %v. Expected nil found %v",
-				children, children.left)
-		case i == len(node.child)-1 && children.right != nil:
-			return fmt.Errorf("Insconsistent right relation at last node  %v. Expected nil found %v",
-				children, children.right)
-		case i > 0 && children.left != node.child[i-1]:
-			return fmt.Errorf("Insconsistent left relation at node  %v idx %d", children, i)
-		case i < len(node.child)-1 && children.right != node.child[i+1]:
-			return fmt.Errorf("Insconsistent right relation at last node  %v idx %d", children, i)
-		}
+		if node.leaf {
+			switch {
+			case i == 0 && children.left != nil:
+				return fmt.Errorf("Inconsistent left children at first node %v. Expected nil found %v",
+					children, children.left)
+			case i == len(node.child)-1 && children.right != nil:
+				return fmt.Errorf("Insconsistent right relation at last node  %v. Expected nil found %v",
+					children, children.right)
+			case i > 0 && children.left != node.child[i-1]:
+				return fmt.Errorf("Insconsistent left relation at node  %v idx %d", children, i)
+			case i < len(node.child)-1 && children.right != node.child[i+1]:
+				return fmt.Errorf("Insconsistent right relation at node  %v idx %d", children, i)
+			}
+		} 
 
 		if err := validateTree(children); err != nil {
 			return err

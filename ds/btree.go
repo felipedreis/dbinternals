@@ -1,7 +1,6 @@
 package ds
 
 import (
-	"errors"
 	"fmt"
 	"log"
 )
@@ -123,6 +122,7 @@ func (b *BTree) Remove(key Key) (Value, error) {
 func (b *BTree) propagateUnderflow(node *Node) {
 	if node == b.root {
 		if !node.leaf && len(node.keys) == 0 {
+			log.Printf("Root node is empty. Promoting %v to root", node.child[0])
 			b.root = node.child[0]
 			b.root.parent = nil
 			b.depth--
@@ -131,61 +131,45 @@ func (b *BTree) propagateUnderflow(node *Node) {
 	}
 	
 	parent := node.parent 
-	parentIdx, left, right := node.getSibblings()
-
+	nodeIdx, left, right := node.getSibblings()
+	var key Key 
+	
 	if len(node.keys) >= b.minKeys() {
 		return 
 	}
 
 	if left != nil && left.size() > b.minKeys() {
-		sepKeyIdx := parentIdx -1 
-		key := left.keys[len(left.keys)-1]
-
+		key = left.keys[len(left.keys)-1]
+		sepKeyIdx := nodeIdx - 1
 		log.Printf("Rebalancing node %v with left %v", node, left)
 		if node.leaf {
 			// 1. get the value from the rightmost key 
 			value := left.values[len(left.values)-1]
 			// 2. open space on the node to add the value 
-			node.keys = append(node.keys, nil)
-			node.values = append(node.values, value)
-			copy(node.keys[1:], node.keys[:len(node.keys)-2])
-			copy(node.values[1:], node.values[:len(node.values)-2])
-			// 3. copy the value into the leftmost position in the node 
-			node.keys[0] = key
-			node.values[0] = value
+			node.keys = InsertAt(node.keys, key, 0)
+			node.values = InsertAt(node.values, value, 0)
 			// 4. update the parent key 
 			parent.keys[sepKeyIdx] = key
 			// shrink the left node 
-			left.keys = left.keys[:len(left.keys)-1]
-			left.values = left.values[:len(left.values)-1]
+			left.keys, _ = Remove(left.keys, len(left.keys)-1) 
+			left.values, _ = Remove(left.values, len(left.values)-1)
 		} else { 
 			// get the rightmost node
 			n := left.child[len(left.child)-1]
-			// open space on the current node to add the new key/child 
-			node.keys = append(node.keys, nil)
-			node.child = append(node.child, nil) 
-			copy(node.keys[1:], node.keys[:len(node.keys)-2])
-			copy(node.child[1:], node.child[:len(node.child)-2])
-			// demote the previous parent key to the current node 
-			node.keys[0] = parent.keys[sepKeyIdx]
+			node.keys = InsertAt(node.keys, parent.keys[sepKeyIdx], 0)
+			node.child = InsertAt(node.child, n, 0) 
 			// promote the previous key to the parent note 
 			parent.keys[sepKeyIdx] = key
-			// add the new child 
-			node.child[0] = n
 			// shrink the left node 
-			left.keys = left.keys[:len(left.keys)-1]
-			left.child = left.child[:len(left.child)-1]
+			left.keys, _ = Remove(left.keys, len(left.keys)-1)
+			left.child, _ = Remove(left.child, len(left.child)-1)
 			// update  parent and left/right relationship 
 			n.parent = node 
-			node.child[1].left = n
-			n.right = node.child[1]
-			n.left = left.child[len(left.child)-1] 
-			left.child[len(left.child)-1].right = n 
 		}
 	} else if right != nil && right.size() > b.minKeys() {
 		log.Printf("Rebalancing node %v with right %v", node, right)
-		sepKeyIdx := parentIdx 
 		key := right.keys[0]
+		sepKeyIdx := nodeIdx
 		if node.leaf {
 			// get the value from the leftmost key on the right node 
 			value := right.values[0]
@@ -193,10 +177,8 @@ func (b *BTree) propagateUnderflow(node *Node) {
 			node.keys = append(node.keys, key)
 			node.values = append(node.values, value)
 			// remove the key from the right node and shrink it  
-			copy(right.keys[0:len(right.keys)-2], right.keys[1:])
-			copy(right.values[0:len(right.values)-2], right.values[1:])
-			right.keys = right.keys[:len(right.keys)-1]
-			right.values = right.values[:len(right.values)-1]
+			right.keys, _ = Remove(right.keys, 0)
+			right.values, _ = Remove(right.values, 0)
 			// update the parent sep key 
 			newSepKey := right.keys[0]
 			parent.keys[sepKeyIdx] = newSepKey
@@ -207,71 +189,98 @@ func (b *BTree) propagateUnderflow(node *Node) {
 			node.keys = append(node.keys, key)
 			node.child = append(node.child, n)
 			//remove key/children from the right node 
-			copy(right.keys[0:len(right.keys)-1], right.keys[1:])
-			copy(right.child[0:len(right.child)-1], right.child[1:])
-			right.keys = right.keys[:len(right.keys)-1]
-			right.child = right.child[:len(right.child)-1]
+			right.keys, _ = Remove(right.keys, 0)
+			right.child, _ = Remove(right.child, 0)
 			// update the parent sep key 
 			newSepKey := right.keys[0]
 			parent.keys[sepKeyIdx] = newSepKey
 			// update parent and left/right relationship 
-			n.parent = node
-			node.child[len(node.child)-2].right = n 
-			n.left = node.child[len(node.child)-2]
-			right.child[0].left = n
-			n.right = right.child[0] 
 		}
 	} else if left != nil && node.size() + left.size() <= b.nodeSize {
-		log.Printf("Merging node %v with left node %v", node, left)	
+		log.Printf("Merging node %v with left node %v", node, left)
+		sepKeyIdx := nodeIdx - 1
+		sepKey := parent.keys[sepKeyIdx]
 		if node.leaf {
+			// copy values from the left node 
+			node.keys = append(left.keys, node.keys...)
+			node.values = append(left.values, node.values...)
+			// remove separator key from the parent node 
+			parent.keys, _ = Remove(parent.keys, sepKeyIdx)
+			parent.child, _ = Remove(parent.child, sepKeyIdx)
+			// fix the left right relationship
+			node.left = left.left 
+			if left.left != nil {
+				left.left.right = node 
+			}
 		} else {
-		} 
-	} else if right != nil && node.size() + right.size() <= b.nodeSize {
-		sepKeyIdx := parentIdx
-		log.Printf("Merging node %v with left node %v", node, right)	
-		if node.leaf {
-			// copy keys from right node 
-			node.keys = append(node.keys, right.keys...)
-			// copy values from right 
-			node.values = append(node.values, right.values...)
-			// remove the key from the parent
-			copy(parent.keys[sepKeyIdx:], parent.keys[sepKeyIdx+1:])
-			parent.keys = parent.keys[:len(parent.keys)-1]
-			// remove the node from the parent 
-			copy(parent.child[sepKeyIdx+1:], parent.child[sepKeyIdx+2:])
-			parent.child[len(parent.child)-1] = nil
-			parent.child = parent.child[:len(parent.keys)-1]
-			// fix right/left relationship
-			node.left = right.left 
-			right.left.right = node
-		} else {
+			node.keys = append([]Key{sepKey}, node.keys...)
+			node.keys = append(left.keys, node.keys...)
+			node.child = append(left.child, node.child...)
+			
+			for _, children := range left.child {
+				children.parent = node
+			}
+			 
+			parent.keys, _ = Remove(parent.keys, sepKeyIdx)
+			parent.child, _ = Remove(parent.child, sepKeyIdx+1)
 		}
 
+		log.Printf("Resulting node %v. Propagating to parent %v", node, parent)
+		b.propagateUnderflow(parent)
+	} else if right != nil && node.size() + right.size() <= b.nodeSize {
+		log.Printf("Merging node %v with right node %v", node, right)	
+		sepKeyIdx := nodeIdx
+		sepKey := parent.keys[sepKeyIdx]
+		
+		if node.leaf {
+			// copy keys/values from right node 
+			node.keys = append(node.keys, right.keys...)
+			node.values = append(node.values, right.values...)
+			// remove the key/child from the parent
+			parent.keys, _ = Remove(parent.keys, sepKeyIdx)
+			parent.child, _ = Remove(parent.child, sepKeyIdx+1)
+			// fix right/left relationship
+			node.right = right.right 
+			if right.right != nil {
+				right.right.left = node
+			}
+		} else {
+			node.keys = append(node.keys, sepKey)
+			node.keys = append(node.keys, right.keys...)
+			node.child = append(node.child, right.child...)
+			
+			for _, children := range right.child {
+				children.parent = node 
+			}
+			
+			parent.keys, _ = Remove(parent.keys, sepKeyIdx)
+			parent.child, _ = Remove(parent.child, sepKeyIdx+1 )
+		}
 		b.propagateUnderflow(parent)
 	}
 }
 
 
-func (b *BTree) merge(left *Node, right *Node) error {
-	if left.parent != right.parent {
-		return errors.New("Can't merge non sibbling nodes")
+func InsertAt[T any](slice []T, value T, index int) []T{
+	if index >= len(slice) {
+		panic(fmt.Sprintf("Trying to insert at index %d outside of the slice %v", index, slice))
 	}
 
-	left.keys = append(left.keys, right.keys...)
-	left.values = append(left.values, right.values...)
-	left.right = right.right
+	slice = append(slice, value)
+	copy(slice[index+1:], slice[index:])
+	slice[index] = value 
+	return slice 
+} 
 
-	parent := left.parent
-	keysCount := len(parent.keys)
+func Remove[T any](slice []T, index int) ([]T, T) {
+	if index >= len(slice) { 
+		panic(fmt.Sprintf("Trying to remove at index %d outside of the slice %v", index, slice))
+	}
 
-	idx := binarySearch(parent, right.keys[0])
-	// TODO fix this shit
-	copy(parent.keys[idx:], parent.keys[idx+1:]) // corner case if key is the last
-	copy(parent.child[idx:], parent.child[idx+1:])
-	parent.keys = parent.keys[:keysCount-1]
-	parent.child = parent.child[:keysCount]
-
-	return nil
+	ret := slice[index]
+	copy(slice[index:], slice[index+1:])
+	slice = slice[:len(slice)-1]
+	return slice, ret
 }
 
 func (b *BTree) Find(key Key) (Value, error) {
