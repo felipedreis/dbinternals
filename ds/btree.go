@@ -34,6 +34,7 @@ func NewBTree(nodeSize int) *BTree {
 }
 
 func (b *BTree) Add(key Key, value Value) {
+	log.Printf("Add key=%v, value=%v", key, value)
 	node, idx := find(b.root, key)
 
 	if node == nil {
@@ -50,57 +51,63 @@ func (b *BTree) Add(key Key, value Value) {
 			fmt.Printf("Couldn't insert value in position %d", idx)
 		}
 
-		b.propagateSplit(node, nodeSize)
+		b.checkOverflow(node, nodeSize)
 		// leaf does not exist, create a new one
 	} else {
 		log.Printf("Found node with keys %v empty position %d, creating new leaf node", node, idx)
 		newLeaf := makeNode(true, b.nodeSize, node)
 		newLeaf.insertAt(0, key, value)
 		nodeSize := node.insertNode(idx, key, newLeaf)
-		b.propagateSplit(node, nodeSize)
+		b.checkOverflow(node, nodeSize)
 	}
 
 	b.keys += 1
 }
 
-func (b *BTree) propagateSplit(node *Node, nodeSize int) {
+func (b *BTree) checkOverflow(node *Node, nodeSize int) {
 	// if after write the nodeSize overflow the leaf node, split the node
 	// and add it to it's parent
-	splitNode := node
+	it := node
 	log.Println("Checking split")
-	for nodeSize > b.nodeSize && node != nil {
-		log.Printf("Splitting node %v\n", splitNode)
-		parent := splitNode.parent
+	for nodeSize > b.nodeSize && it != nil {
+		log.Printf("Splitting node %v\n", it)
+		parent := it.parent
+		
+		split, key := it.split(b.nodeSize)
+		log.Printf("left: %v it: %v right: %v", it.left, it, split)
+
+		if it.leaf {
+			right := it.right
+			if right != nil {
+				right.left = split 
+				split.right = right
+			}
+
+			it.right = split
+			split.left = it 
+		}
 
 		if parent == nil {
 			newRoot := makeNode(false, b.nodeSize, nil)
 
-			right, key := splitNode.split(b.nodeSize)
-
 			newRoot.keys = append(newRoot.keys, key)
-			newRoot.child = append(newRoot.child, splitNode)
-			newRoot.child = append(newRoot.child, right)
+			newRoot.child = append(newRoot.child, it)
+			newRoot.child = append(newRoot.child, split)
 
-			splitNode.right = right
-			right.left = splitNode
-			splitNode.left = nil
-			right.right = nil
-
-			splitNode.parent = newRoot
-			right.parent = newRoot
+			it.parent = newRoot
+			split.parent = newRoot
 			b.root = newRoot
 			b.depth += 1
 			break
 		}
 
-		right, key := splitNode.split(b.nodeSize)
 
-		log.Printf("Splited node %v with split key %s\n", right, key)
+		log.Printf("Splited node %v with split key %s\n", split, key)
 
 		idx := binarySearch(parent, key)
 		log.Printf("Inserting split key at parent keys %v index %d\n", parent, idx)
-		nodeSize = parent.insertNode(idx, key, right)
-		splitNode = parent
+		nodeSize = parent.insertNode(idx, key, split)
+		it = parent
 	}
 }
 
@@ -113,13 +120,13 @@ func (b *BTree) Remove(key Key) (Value, error) {
 	}
 
 	ret := node.remove(idx)
-
-	b.propagateUnderflow(node)
+	b.checkUnderflow(node)
+	b.keys-- 
 
 	return ret, nil
 }
 
-func (b *BTree) propagateUnderflow(node *Node) {
+func (b *BTree) checkUnderflow(node *Node) {
 	if node == b.root {
 		if !node.leaf && len(node.keys) == 0 {
 			log.Printf("Root node is empty. Promoting %v to root", node.child[0])
@@ -185,16 +192,17 @@ func (b *BTree) propagateUnderflow(node *Node) {
 		} else {
 			// get the children node from the leftmost position on the right node
 			n := right.child[0]
+			sepKey := node.parent.keys[sepKeyIdx]
 			// append it to the current node 
-			node.keys = append(node.keys, key)
+			node.keys = append(node.keys, sepKey)
 			node.child = append(node.child, n)
 			//remove key/children from the right node 
 			right.keys, _ = Remove(right.keys, 0)
 			right.child, _ = Remove(right.child, 0)
 			// update the parent sep key 
-			newSepKey := right.keys[0]
-			parent.keys[sepKeyIdx] = newSepKey
+			parent.keys[sepKeyIdx] = key
 			// update parent and left/right relationship 
+			n.parent = node
 		}
 	} else if left != nil && node.size() + left.size() <= b.nodeSize {
 		log.Printf("Merging node %v with left node %v", node, left)
@@ -208,10 +216,11 @@ func (b *BTree) propagateUnderflow(node *Node) {
 			parent.keys, _ = Remove(parent.keys, sepKeyIdx)
 			parent.child, _ = Remove(parent.child, sepKeyIdx)
 			// fix the left right relationship
-			node.left = left.left 
-			if left.left != nil {
-				left.left.right = node 
+			ll := left.left
+			if ll != nil {
+				ll.right = node 
 			}
+			node.left = ll
 		} else {
 			node.keys = append([]Key{sepKey}, node.keys...)
 			node.keys = append(left.keys, node.keys...)
@@ -222,11 +231,11 @@ func (b *BTree) propagateUnderflow(node *Node) {
 			}
 			 
 			parent.keys, _ = Remove(parent.keys, sepKeyIdx)
-			parent.child, _ = Remove(parent.child, sepKeyIdx+1)
+			parent.child, _ = Remove(parent.child, sepKeyIdx)
 		}
 
 		log.Printf("Resulting node %v. Propagating to parent %v", node, parent)
-		b.propagateUnderflow(parent)
+		b.checkUnderflow(parent)
 	} else if right != nil && node.size() + right.size() <= b.nodeSize {
 		log.Printf("Merging node %v with right node %v", node, right)	
 		sepKeyIdx := nodeIdx
@@ -240,10 +249,13 @@ func (b *BTree) propagateUnderflow(node *Node) {
 			parent.keys, _ = Remove(parent.keys, sepKeyIdx)
 			parent.child, _ = Remove(parent.child, sepKeyIdx+1)
 			// fix right/left relationship
-			node.right = right.right 
-			if right.right != nil {
-				right.right.left = node
+
+			rr := right.right
+			if rr != nil {
+				rr.left = node 
 			}
+			node.right = rr
+
 		} else {
 			node.keys = append(node.keys, sepKey)
 			node.keys = append(node.keys, right.keys...)
@@ -256,10 +268,9 @@ func (b *BTree) propagateUnderflow(node *Node) {
 			parent.keys, _ = Remove(parent.keys, sepKeyIdx)
 			parent.child, _ = Remove(parent.child, sepKeyIdx+1 )
 		}
-		b.propagateUnderflow(parent)
+		b.checkUnderflow(parent)
 	}
 }
-
 
 func (b *BTree) Find(key Key) (Value, error) {
 

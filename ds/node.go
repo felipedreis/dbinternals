@@ -66,26 +66,6 @@ func printNode(n *Node, level int) {
 	}
 }
 
-func binarySearch(node *Node, key Key) int {
-	l := 0
-	r := len(node.keys)
-
-	for l != r {
-		mid := (l + r) / 2
-
-		compare := key.Compare(node.keys[mid])
-		switch {
-		case compare > 0: 
-			l = mid + 1
-		case compare < 0:
-			r = mid
-		default: 
-			return mid
-		}
-	}
-
-	return l
-}
 
 func (n *Node) getSibblings() (int, *Node, *Node) {
 	var left *Node 
@@ -123,25 +103,59 @@ func find(node *Node, key Key) (*Node, int) {
 		return node, idx
 	}
 
-	idx := binarySearch(node, key)
+	idx := upperBound(node, key)
 	
+
 	log.Printf("Descending at idx %d", idx) 
 	return find(node.child[idx], key)
+}
+
+func binarySearch(node *Node, key Key) int {
+	l := 0
+	r := len(node.keys)
+
+	for l != r {
+		mid := (l + r) / 2
+
+		compare := key.Compare(node.keys[mid])
+		switch {
+		case compare > 0: 
+			l = mid + 1
+		case compare < 0:
+			r = mid
+		default: 
+			return mid
+		}
+	}
+
+	return l
+}
+
+func upperBound(node *Node, key Key) int {
+	l := 0
+	r := len(node.keys)
+
+	for l < r {
+		mid := (l + r) / 2
+
+		compare := key.Compare(node.keys[mid])
+		if compare >= 0 { 
+			l = mid + 1
+		} else {
+			r = mid
+		}
+	}
+
+	return l
 }
 
 func (n *Node) insertAt(index int, key Key, val Value) (int, error) {
 	if !n.leaf {
 		return 0, errors.New("Only insert values at leaf nodes")
 	}
-
-	n.values = append(n.values, val)
-	n.keys = append(n.keys, nil)
-
-	copy(n.values[index+1:], n.values[index:])
-	copy(n.keys[index+1:], n.keys[index:])
-
-	n.values[index] = val
-	n.keys[index] = key
+	
+	n.keys = InsertAt(n.keys, key, index)
+	n.values = InsertAt(n.values, val, index)
 
 	return len(n.keys), nil
 }
@@ -179,32 +193,14 @@ func (n *Node) split(nodeSize int) (*Node, Key) {
 		for _, children := range right.child {
 			children.parent = right
 		}
-
-		n.child[len(n.child)-1].right = nil
-		right.child[0].left = nil
 	}
 
 	return right, midKey
 }
 
 func (n *Node) insertNode(index int, key Key, node *Node) int {
-	n.keys = append(n.keys, nil)
-	n.child = append(n.child, nil)
-	copy(n.keys[index+1:], n.keys[index:])
-	copy(n.child[index+2:], n.child[index+1:])
-	n.keys[index] = key
-	n.child[index+1] = node
-
-	n.child[index].right = node
-	node.left = n.child[index]
-
-	if index+2 < len(n.child) {
-		n.child[index+2].left = node
-		node.right = n.child[index+2]
-	} else {
-		node.right = nil
-	}
-
+	n.keys = InsertAt(n.keys, key, index)
+	n.child = InsertAt(n.child, node, index+1)
 	return len(n.keys)
 }
 

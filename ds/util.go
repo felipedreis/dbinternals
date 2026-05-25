@@ -1,7 +1,9 @@
+package ds
 
+import "fmt"
 
 func InsertAt[T any](slice []T, value T, index int) []T{
-	if index >= len(slice) {
+	if index > len(slice) {
 		panic(fmt.Sprintf("Trying to insert at index %d outside of the slice %v", index, slice))
 	}
 
