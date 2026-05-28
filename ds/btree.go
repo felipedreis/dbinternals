@@ -21,6 +21,29 @@ type BTree struct {
 	nodeSize int
 }
 
+type BTNode interface {
+	GetParent() *BTNode
+	SetParent(*BTNode)
+	GetSibblings() (*BTNode, *BTNode)
+	SetLeftSibbling(*BTNode)
+	SetRightSibbling(*BTNode)
+
+	SetChild(int)
+	AddChild(Key, *BTNode)
+
+	Find(Key) (*BTNode, int)
+	InsertAt(int, Key, Value) 
+	IsAt(int,Key) bool
+	Remove(int) Key
+	IsLeaf()
+	NumKeys() int 
+	Merge(*BTNode)
+	Split(*BTNode)
+}
+
+type BTNodeProvider interface {
+	GetNewNode() *BTNode
+}
 
 func NewBTree(nodeSize int) *BTree {
 	var rootNode = makeNode(true, nodeSize, nil)
@@ -41,9 +64,9 @@ func (b *BTree) Add(key Key, value Value) {
 		log.Printf("Tree is empty, adding new leaf")
 		node = makeNode(true, b.nodeSize, b.root)
 		node.insertAt(idx, key, value)
-		b.root.keys[0] = key
-		b.root.child[1] = node
-	} else if node.leaf {
+		b.root.Keys[0] = key
+		b.root.Child[1] = node
+	} else if node.Leaf {
 		log.Printf("Found a leaf node with keys %v, inserting on it at index %d", node, idx)
 		nodeSize, e := node.insertAt(idx, key, value)
 
@@ -71,31 +94,31 @@ func (b *BTree) checkOverflow(node *Node, nodeSize int) {
 	log.Println("Checking split")
 	for nodeSize > b.nodeSize && it != nil {
 		log.Printf("Splitting node %v\n", it)
-		parent := it.parent
+		parent := it.Parent
 		
 		split, key := it.split(b.nodeSize)
-		log.Printf("left: %v it: %v right: %v", it.left, it, split)
+		log.Printf("left: %v it: %v right: %v", it.Left, it, split)
 
-		if it.leaf {
-			right := it.right
+		if it.Leaf {
+			right := it.Right
 			if right != nil {
-				right.left = split 
-				split.right = right
+				right.Left = split 
+				split.Right = right
 			}
 
-			it.right = split
-			split.left = it 
+			it.Right = split
+			split.Left = it 
 		}
 
 		if parent == nil {
 			newRoot := makeNode(false, b.nodeSize, nil)
 
-			newRoot.keys = append(newRoot.keys, key)
-			newRoot.child = append(newRoot.child, it)
-			newRoot.child = append(newRoot.child, split)
+			newRoot.Keys = append(newRoot.Keys, key)
+			newRoot.Child = append(newRoot.Child, it)
+			newRoot.Child = append(newRoot.Child, split)
 
-			it.parent = newRoot
-			split.parent = newRoot
+			it.Parent = newRoot
+			split.Parent = newRoot
 			b.root = newRoot
 			b.depth += 1
 			break
@@ -128,145 +151,145 @@ func (b *BTree) Remove(key Key) (Value, error) {
 
 func (b *BTree) checkUnderflow(node *Node) {
 	if node == b.root {
-		if !node.leaf && len(node.keys) == 0 {
-			log.Printf("Root node is empty. Promoting %v to root", node.child[0])
-			b.root = node.child[0]
-			b.root.parent = nil
+		if !node.Leaf && len(node.Keys) == 0 {
+			log.Printf("Root node is empty. Promoting %v to root", node.Child[0])
+			b.root = node.Child[0]
+			b.root.Parent = nil
 			b.depth--
 			return 
 		}
 	}
 	
-	parent := node.parent 
-	nodeIdx, left, right := node.getSibblings()
+	parent := node.Parent 
+	nodeIdx, left, right := node.GetSibblings()
 	var key Key 
 	
-	if len(node.keys) >= b.minKeys() {
+	if len(node.Keys) >= b.minKeys() {
 		return 
 	}
 
-	if left != nil && left.size() > b.minKeys() {
-		key = left.keys[len(left.keys)-1]
+	if left != nil && left.Size() > b.minKeys() {
+		key = left.Keys[len(left.Keys)-1]
 		sepKeyIdx := nodeIdx - 1
 		log.Printf("Rebalancing node %v with left %v", node, left)
-		if node.leaf {
+		if node.Leaf {
 			// 1. get the value from the rightmost key 
-			value := left.values[len(left.values)-1]
+			value := left.Values[len(left.Values)-1]
 			// 2. open space on the node to add the value 
-			node.keys = InsertAt(node.keys, key, 0)
-			node.values = InsertAt(node.values, value, 0)
+			node.Keys = InsertAt(node.Keys, key, 0)
+			node.Values = InsertAt(node.Values, value, 0)
 			// 4. update the parent key 
-			parent.keys[sepKeyIdx] = key
+			parent.Keys[sepKeyIdx] = key
 			// shrink the left node 
-			left.keys, _ = Remove(left.keys, len(left.keys)-1) 
-			left.values, _ = Remove(left.values, len(left.values)-1)
+			left.Keys, _ = Remove(left.Keys, len(left.Keys)-1) 
+			left.Values, _ = Remove(left.Values, len(left.Values)-1)
 		} else { 
 			// get the rightmost node
-			n := left.child[len(left.child)-1]
-			node.keys = InsertAt(node.keys, parent.keys[sepKeyIdx], 0)
-			node.child = InsertAt(node.child, n, 0) 
+			n := left.Child[len(left.Child)-1]
+			node.Keys = InsertAt(node.Keys, parent.Keys[sepKeyIdx], 0)
+			node.Child = InsertAt(node.Child, n, 0) 
 			// promote the previous key to the parent note 
-			parent.keys[sepKeyIdx] = key
+			parent.Keys[sepKeyIdx] = key
 			// shrink the left node 
-			left.keys, _ = Remove(left.keys, len(left.keys)-1)
-			left.child, _ = Remove(left.child, len(left.child)-1)
+			left.Keys, _ = Remove(left.Keys, len(left.Keys)-1)
+			left.Child, _ = Remove(left.Child, len(left.Child)-1)
 			// update  parent and left/right relationship 
-			n.parent = node 
+			n.Parent = node 
 		}
-	} else if right != nil && right.size() > b.minKeys() {
+	} else if right != nil && right.Size() > b.minKeys() {
 		log.Printf("Rebalancing node %v with right %v", node, right)
-		key := right.keys[0]
+		key := right.Keys[0]
 		sepKeyIdx := nodeIdx
-		if node.leaf {
+		if node.Leaf {
 			// get the value from the leftmost key on the right node 
-			value := right.values[0]
+			value := right.Values[0]
 			// oppend it on the node 
-			node.keys = append(node.keys, key)
-			node.values = append(node.values, value)
+			node.Keys = append(node.Keys, key)
+			node.Values = append(node.Values, value)
 			// remove the key from the right node and shrink it  
-			right.keys, _ = Remove(right.keys, 0)
-			right.values, _ = Remove(right.values, 0)
+			right.Keys, _ = Remove(right.Keys, 0)
+			right.Values, _ = Remove(right.Values, 0)
 			// update the parent sep key 
-			newSepKey := right.keys[0]
-			parent.keys[sepKeyIdx] = newSepKey
+			newSepKey := right.Keys[0]
+			parent.Keys[sepKeyIdx] = newSepKey
 		} else {
 			// get the children node from the leftmost position on the right node
-			n := right.child[0]
-			sepKey := node.parent.keys[sepKeyIdx]
+			n := right.Child[0]
+			sepKey := node.Parent.Keys[sepKeyIdx]
 			// append it to the current node 
-			node.keys = append(node.keys, sepKey)
-			node.child = append(node.child, n)
+			node.Keys = append(node.Keys, sepKey)
+			node.Child = append(node.Child, n)
 			//remove key/children from the right node 
-			right.keys, _ = Remove(right.keys, 0)
-			right.child, _ = Remove(right.child, 0)
+			right.Keys, _ = Remove(right.Keys, 0)
+			right.Child, _ = Remove(right.Child, 0)
 			// update the parent sep key 
-			parent.keys[sepKeyIdx] = key
+			parent.Keys[sepKeyIdx] = key
 			// update parent and left/right relationship 
-			n.parent = node
+			n.Parent = node
 		}
-	} else if left != nil && node.size() + left.size() <= b.nodeSize {
+	} else if left != nil && node.Size() + left.Size() <= b.nodeSize {
 		log.Printf("Merging node %v with left node %v", node, left)
 		sepKeyIdx := nodeIdx - 1
-		sepKey := parent.keys[sepKeyIdx]
-		if node.leaf {
+		sepKey := parent.Keys[sepKeyIdx]
+		if node.Leaf {
 			// copy values from the left node 
-			node.keys = append(left.keys, node.keys...)
-			node.values = append(left.values, node.values...)
+			node.Keys = append(left.Keys, node.Keys...)
+			node.Values = append(left.Values, node.Values...)
 			// remove separator key from the parent node 
-			parent.keys, _ = Remove(parent.keys, sepKeyIdx)
-			parent.child, _ = Remove(parent.child, sepKeyIdx)
+			parent.Keys, _ = Remove(parent.Keys, sepKeyIdx)
+			parent.Child, _ = Remove(parent.Child, sepKeyIdx)
 			// fix the left right relationship
-			ll := left.left
+			ll := left.Left
 			if ll != nil {
-				ll.right = node 
+				ll.Right = node 
 			}
-			node.left = ll
+			node.Left = ll
 		} else {
-			node.keys = append([]Key{sepKey}, node.keys...)
-			node.keys = append(left.keys, node.keys...)
-			node.child = append(left.child, node.child...)
+			node.Keys = append([]Key{sepKey}, node.Keys...)
+			node.Keys = append(left.Keys, node.Keys...)
+			node.Child = append(left.Child, node.Child...)
 			
-			for _, children := range left.child {
-				children.parent = node
+			for _, children := range left.Child {
+				children.Parent = node
 			}
 			 
-			parent.keys, _ = Remove(parent.keys, sepKeyIdx)
-			parent.child, _ = Remove(parent.child, sepKeyIdx)
+			parent.Keys, _ = Remove(parent.Keys, sepKeyIdx)
+			parent.Child, _ = Remove(parent.Child, sepKeyIdx)
 		}
 
 		log.Printf("Resulting node %v. Propagating to parent %v", node, parent)
 		b.checkUnderflow(parent)
-	} else if right != nil && node.size() + right.size() <= b.nodeSize {
+	} else if right != nil && node.Size() + right.Size() <= b.nodeSize {
 		log.Printf("Merging node %v with right node %v", node, right)	
 		sepKeyIdx := nodeIdx
-		sepKey := parent.keys[sepKeyIdx]
+		sepKey := parent.Keys[sepKeyIdx]
 		
-		if node.leaf {
+		if node.Leaf {
 			// copy keys/values from right node 
-			node.keys = append(node.keys, right.keys...)
-			node.values = append(node.values, right.values...)
+			node.Keys = append(node.Keys, right.Keys...)
+			node.Values = append(node.Values, right.Values...)
 			// remove the key/child from the parent
-			parent.keys, _ = Remove(parent.keys, sepKeyIdx)
-			parent.child, _ = Remove(parent.child, sepKeyIdx+1)
+			parent.Keys, _ = Remove(parent.Keys, sepKeyIdx)
+			parent.Child, _ = Remove(parent.Child, sepKeyIdx+1)
 			// fix right/left relationship
 
-			rr := right.right
+			rr := right.Right
 			if rr != nil {
-				rr.left = node 
+				rr.Left = node 
 			}
-			node.right = rr
+			node.Right = rr
 
 		} else {
-			node.keys = append(node.keys, sepKey)
-			node.keys = append(node.keys, right.keys...)
-			node.child = append(node.child, right.child...)
+			node.Keys = append(node.Keys, sepKey)
+			node.Keys = append(node.Keys, right.Keys...)
+			node.Child = append(node.Child, right.Child...)
 			
-			for _, children := range right.child {
-				children.parent = node 
+			for _, children := range right.Child {
+				children.Parent = node 
 			}
 			
-			parent.keys, _ = Remove(parent.keys, sepKeyIdx)
-			parent.child, _ = Remove(parent.child, sepKeyIdx+1 )
+			parent.Keys, _ = Remove(parent.Keys, sepKeyIdx)
+			parent.Child, _ = Remove(parent.Child, sepKeyIdx+1 )
 		}
 		b.checkUnderflow(parent)
 	}
@@ -279,7 +302,7 @@ func (b *BTree) Find(key Key) (Value, error) {
 	if !node.isAt(key, idx) {
 		return Value{}, fmt.Errorf("Key %v not found", key)
 	}
-	return node.values[idx], nil
+	return node.Values[idx], nil
 }
 
 

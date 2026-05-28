@@ -17,14 +17,16 @@ const (
 )
 
 type Node struct {
-	leaf   bool
-	parent *Node
-	keys   []Key
-	child  []*Node
-	values []Value
+	NodeId uint64
+	
+	Leaf   bool
+	Parent *Node
+	Keys   []Key
+	Child  []*Node
+	Values []Value
 
-	left  *Node
-	right *Node
+	Left  *Node
+	Right *Node
 }
 
 func makeNode(leaf bool, nodeSize int, parent *Node) *Node {
@@ -38,11 +40,11 @@ func makeNode(leaf bool, nodeSize int, parent *Node) *Node {
 	}
 
 	return &Node{
-		leaf:   leaf,
-		keys:   make([]Key, 0, nodeSize),
-		child:  child,
-		values: values,
-		parent: parent,
+		Leaf:   leaf,
+		Keys:   make([]Key, 0, nodeSize),
+		Child:  child,
+		Values: values,
+		Parent: parent,
 	}
 }
 
@@ -57,8 +59,8 @@ func printNode(n *Node, level int) {
 	fmt.Printf("%s %v\n", indent, n)
 
 	// Recurse into children if not a leaf
-	if !n.leaf {
-		for _, child := range n.child {
+	if !n.Leaf {
+		for _, child := range n.Child {
 			if child != nil {
 				printNode(child, level+1)
 			}
@@ -67,18 +69,18 @@ func printNode(n *Node, level int) {
 }
 
 
-func (n *Node) getSibblings() (int, *Node, *Node) {
+func (n *Node) GetSibblings() (int, *Node, *Node) {
 	var left *Node 
 	var right *Node
-	parent := n.parent
+	parent := n.Parent
 	var nodeIdx int 
 
-	if parent == nil || n.isEmpty() {
+	if parent == nil || n.IsEmpty() {
 		return -1, nil, nil
 	}
 	
 	
-	for i, children := range parent.child {
+	for i, children := range parent.Child {
 		if children == n {
 			nodeIdx = i 
 			break
@@ -86,10 +88,10 @@ func (n *Node) getSibblings() (int, *Node, *Node) {
 	}
 
 	if nodeIdx > 0 {
-		left = parent.child[nodeIdx- 1]
+		left = parent.Child[nodeIdx- 1]
 	}
-	if nodeIdx < len(parent.child) - 1 {
-		right = parent.child[nodeIdx + 1]
+	if nodeIdx < len(parent.Child) - 1 {
+		right = parent.Child[nodeIdx + 1]
 	}
 
 	return nodeIdx, left, right
@@ -97,7 +99,7 @@ func (n *Node) getSibblings() (int, *Node, *Node) {
 
 func find(node *Node, key Key) (*Node, int) {
 	log.Printf("looking for key %v at node %v", key, node)
-	if node.leaf {
+	if node.Leaf {
 		idx := binarySearch(node, key) 
 		log.Printf("Found key %v at Leaf node index %d", key, idx)
 		return node, idx
@@ -107,17 +109,17 @@ func find(node *Node, key Key) (*Node, int) {
 	
 
 	log.Printf("Descending at idx %d", idx) 
-	return find(node.child[idx], key)
+	return find(node.Child[idx], key)
 }
 
 func binarySearch(node *Node, key Key) int {
 	l := 0
-	r := len(node.keys)
+	r := len(node.Keys)
 
 	for l != r {
 		mid := (l + r) / 2
 
-		compare := key.Compare(node.keys[mid])
+		compare := key.Compare(node.Keys[mid])
 		switch {
 		case compare > 0: 
 			l = mid + 1
@@ -133,12 +135,12 @@ func binarySearch(node *Node, key Key) int {
 
 func upperBound(node *Node, key Key) int {
 	l := 0
-	r := len(node.keys)
+	r := len(node.Keys)
 
 	for l < r {
 		mid := (l + r) / 2
 
-		compare := key.Compare(node.keys[mid])
+		compare := key.Compare(node.Keys[mid])
 		if compare >= 0 { 
 			l = mid + 1
 		} else {
@@ -150,48 +152,48 @@ func upperBound(node *Node, key Key) int {
 }
 
 func (n *Node) insertAt(index int, key Key, val Value) (int, error) {
-	if !n.leaf {
+	if !n.Leaf {
 		return 0, errors.New("Only insert values at leaf nodes")
 	}
 	
-	n.keys = InsertAt(n.keys, key, index)
-	n.values = InsertAt(n.values, val, index)
+	n.Keys = InsertAt(n.Keys, key, index)
+	n.Values = InsertAt(n.Values, val, index)
 
-	return len(n.keys), nil
+	return len(n.Keys), nil
 }
 
 func (n *Node) remove(idx int) Value {
-	ret := n.values[idx]
-	lastIdx := len(n.keys) - 1
-	copy(n.keys[idx:], n.keys[idx+1:])
-	copy(n.values[idx:], n.values[idx+1:])
-	n.keys = n.keys[:lastIdx]
-	n.values = n.values[:lastIdx]
+	ret := n.Values[idx]
+	lastIdx := len(n.Keys) - 1
+	copy(n.Keys[idx:], n.Keys[idx+1:])
+	copy(n.Values[idx:], n.Values[idx+1:])
+	n.Keys = n.Keys[:lastIdx]
+	n.Values = n.Values[:lastIdx]
 	return ret
 }
 
 func (n *Node) split(nodeSize int) (*Node, Key) {
-	right := makeNode(n.leaf, nodeSize, n.parent)
+	right := makeNode(n.Leaf, nodeSize, n.Parent)
 
-	mid := len(n.keys) / 2
-	midKey := n.keys[mid]
+	mid := len(n.Keys) / 2
+	midKey := n.Keys[mid]
 
-	if n.leaf {
+	if n.Leaf {
 		// copy mid keys and mid values
-		right.keys = append(right.keys, n.keys[mid:]...)
-		right.values = append(right.values, n.values[mid:]...)
-		n.keys = n.keys[:mid]
-		n.values = n.values[:mid]
+		right.Keys = append(right.Keys, n.Keys[mid:]...)
+		right.Values = append(right.Values, n.Values[mid:]...)
+		n.Keys = n.Keys[:mid]
+		n.Values = n.Values[:mid]
 	} else {
 		// copy last k keys and last k + 1 child nodes
 		// the mid key goes up to the next level
-		right.keys = append(right.keys, n.keys[mid+1:]...)
-		right.child = append(right.child, n.child[mid+1:]...)
-		n.keys = n.keys[:mid]
-		n.child = n.child[:mid+1]
+		right.Keys = append(right.Keys, n.Keys[mid+1:]...)
+		right.Child = append(right.Child, n.Child[mid+1:]...)
+		n.Keys = n.Keys[:mid]
+		n.Child = n.Child[:mid+1]
 
-		for _, children := range right.child {
-			children.parent = right
+		for _, children := range right.Child {
+			children.Parent = right
 		}
 	}
 
@@ -199,38 +201,46 @@ func (n *Node) split(nodeSize int) (*Node, Key) {
 }
 
 func (n *Node) insertNode(index int, key Key, node *Node) int {
-	n.keys = InsertAt(n.keys, key, index)
-	n.child = InsertAt(n.child, node, index+1)
-	return len(n.keys)
+	n.Keys = InsertAt(n.Keys, key, index)
+	n.Child = InsertAt(n.Child, node, index+1)
+	return len(n.Keys)
 }
 
 func (n *Node) isAt(key Key, index int) bool {
-	if n.isEmpty() || index >= len(n.keys) {
+	if n.IsEmpty() || index >= len(n.Keys) {
 		return false
 	}
 
-	keyAtIndex := n.keys[index]
+	keyAtIndex := n.Keys[index]
 
-	return n.leaf && keyAtIndex.Compare(key) == 0
+	return n.Leaf && keyAtIndex.Compare(key) == 0
 }
 
-func (n Node) isEmpty() bool {
-	return len(n.keys) == 0
+func (n Node) IsEmpty() bool {
+	return len(n.Keys) == 0
 }
 
-func (n Node) size() int {
-	return len(n.keys)
+func (n Node) IsRoot() bool {
+	return n.Parent == nil
+}
+
+func (n Node) IsLeaf() bool {
+	return n.Leaf
+}
+
+func (n Node) Size() int {
+	return len(n.Keys)
 }
 
 func (n Node) String() string {
 	// Build a string of the keys in this node
 	nodeType := "Internal"
-	if n.leaf {
+	if n.Leaf {
 		nodeType = "Leaf"
-	} else if n.parent == nil {
+	} else if n.Parent == nil {
 		nodeType = "Root"
 	}
 
-	return fmt.Sprintf("%s: %v", nodeType, n.keys)
+	return fmt.Sprintf("%s: %v", nodeType, n.Keys)
 }
 

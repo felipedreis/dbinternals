@@ -3,7 +3,6 @@ package ds
 import (
 	"errors"
 	"fmt"
-	"io"
 	"log"
 	"math/rand/v2"
 	"os"
@@ -32,7 +31,7 @@ func (t TestKey) String() string {
 
 }
 func init() {
-	log.SetOutput(io.Discard)
+	log.SetOutput(os.Stdout)
 }
 func TestBTree_Add(t *testing.T) {
 	// 1. Setup: Create a tree with a small nodeSize (e.g., 3 or 4)
