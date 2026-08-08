@@ -1,7 +1,8 @@
-package filesystem
+package ds
 
 import (
 	"encoding/binary"
+	"fmt"
 )
 
 type PageId uint64
@@ -84,6 +85,17 @@ type Page struct {
 }
 
 
+func MakePage(id PageId, leaf bool) Page {
+	page := Page{
+		Id: id, 
+		data: make([]byte, PAGE_SIZE), 
+	}
+
+	page.SetLeaf(leaf)
+
+	return page
+}
+
 func (p *Page) IsLeaf() bool {
 	return p.data[PAGE_HEADER_FLAGS] & 1 << PAGE_TYPE != 0
 }
@@ -126,9 +138,9 @@ func (p *Page) GetRightSibbling() PageId {
 	return p.getPointer(PAGE_HEADER_RIGHT_SIB)
 }
 
-func (p *Page) GetKeys() uint16 {
+func (p *Page) GetKeys() int {
 	keys := p.getHeaderValue(PAGE_HEADER_KEYS, SZ_KEYS)
-	return keys
+	return int(keys)
 }
 
 func (p *Page) GetDataSize() uint16 {
@@ -165,8 +177,29 @@ func (p *Page) GetKeyAt(idx int) []byte {
 	return p.data[keyBegin:keyBegin+keySize]
 }
 
-func (p *Page) SetKeys(keys uint16) {
-	Endian.PutUint16(p.data[PAGE_HEADER_KEYS:PAGE_HEADER_KEYS+SZ_KEYS], keys); 
+func (p *Page) SetParent(parent PageId) {
+	p.SetPointer(PAGE_HEADER_PARENT, parent)
+}
+
+func (p *Page) SetRoot(root bool) {
+	if root {
+		p.data[PAGE_HEADER_FLAGS] = p.data[PAGE_HEADER_FLAGS] & (1 << PAGE_ROOT)
+	} else {
+		p.data[PAGE_HEADER_FLAGS] = p.data[PAGE_HEADER_FLAGS] & (0 << PAGE_ROOT)
+	}
+}
+
+func (p *Page) SetLeaf(leaf bool) {
+	if leaf {
+		p.data[PAGE_HEADER_FLAGS] = p.data[PAGE_HEADER_FLAGS] & (1 << PAGE_TYPE)
+	} else {
+		p.data[PAGE_HEADER_FLAGS] = p.data[PAGE_HEADER_FLAGS] & (0 << PAGE_TYPE)
+	}
+}
+
+
+func (p *Page) SetKeys(keys int) {
+	Endian.PutUint16(p.data[PAGE_HEADER_KEYS:PAGE_HEADER_KEYS+SZ_KEYS], uint16(keys)); 
 }
 
 func (p *Page) SetFreeBlock(freeblock uint16) {
@@ -241,6 +274,18 @@ func (p *Page) PutKeyChild(idx int, key []byte, pageId PageId) bool {
 	return p.writeToFreeBlock(idx, cell, cellSize)
 }
 
+func (p *Page) RemoveChildAtIdx(idx int) ([]byte, PageId, error) {
+	
+	if idx > p.GetKeys() {
+		return nil, 0, fmt.Errorf("Index out of bound")
+	}
+	cell := p.removeIdx(idx)
+
+}
+
+func (p *Page) RemoveValueAtIdx(idx int) {
+}
+
 func (p *Page) writeToFreeBlock(idx int, cell []byte, cellSize uint16) bool {
 
 	payloadSize := cellSize + CELL_POINTER_SIZE
@@ -277,7 +322,7 @@ func (p *Page) defrag() {
 	buffer := make([]byte, PAGE_SIZE)
 
 	copy(buffer[0:PAGE_HEADER_SIZE], p.data[0:PAGE_HEADER_SIZE])
-	keysSize := int(p.GetKeys())
+	keysSize := p.GetKeys()
 	isLeaf := p.IsLeaf()
 
 	var freeBlockOffset = uint16(PAGE_SIZE)
@@ -290,7 +335,8 @@ func (p *Page) defrag() {
 			dataSize := Endian.Uint16(p.data[cellPointer+CELL_KEY_SIZE:cellPointer+CELL_KEY_SIZE+CELL_DATA_SIZE])
 			cellSize = CELL_KEY_SIZE + CELL_DATA_SIZE + keySize + dataSize
 		} else {
-
+			keySize := Endian.Uint16(p.data[cellPointer:cellPointer+CELL_KEY_SIZE])
+			cellSize = CELL_KEY_SIZE + keySize + CELL_CHILD_POINTER_SIZE
 		}
 		
 		copy(buffer[freeBlockOffset-cellSize:freeBlockOffset], p.data[cellPointer:cellPointer+cellSize])
@@ -304,7 +350,33 @@ func (p *Page) defrag() {
 }
 
 func (p *Page) removeIdx(idx int) []byte {
-	return nil	
+	keys := p.GetKeys()
+	cellPointer := p.getCellPointer(idx)
+	var cellSize, keySize uint16 
+	var cell []byte 
+	
+	if p.IsLeaf() {
+		keySize = Endian.Uint16(p.data[cellPointer:cellPointer+CELL_KEY_SIZE])
+		dataSize := Endian.Uint16(p.data[cellPointer+CELL_KEY_SIZE:cellPointer+CELL_KEY_SIZE+CELL_DATA_SIZE])
+		cellSize = CELL_KEY_SIZE + CELL_DATA_SIZE + keySize + dataSize
+	} else {
+		keySize = Endian.Uint16(p.data[cellPointer:cellPointer+CELL_KEY_SIZE])
+		cellSize = CELL_KEY_SIZE + keySize + CELL_CHILD_POINTER_SIZE
+	}
+	cell = make([]byte, cellSize)
+	copy(cell[0:cellSize], p.data[cellPointer:cellPointer+cellSize])
+
+	//remove the cell pointer
+	idxBegin := PAGE_HEADER_SIZE +CELL_POINTER_SIZE*idx
+	nextIdxBegin := PAGE_HEADER_SIZE + CELL_POINTER_SIZE*(idx+1)
+	keysSize := PAGE_HEADER_SIZE + CELL_POINTER_SIZE*keys
+	copy(p.data[idxBegin:keysSize], p.data[nextIdxBegin:keysSize])
+
+	keys--
+	freeblock := p.GetFreeBlockSize()
+	freeblock -= uint16(cellSize)
+	p.SetFragmented(uint16(cellSize))
+	return cell
 }
 
 
@@ -327,6 +399,18 @@ func encodeValueCell(key []byte, data []byte) ([]byte, uint16) {
 	return buffer, uint16(cellSize) 
 }
 
+func decodeValueCell(cell []byte) ([]byte, []byte) {
+	dataSizeOffset := CELL_KEY_SIZE
+	keyOffset := uint16(CELL_KEY_SIZE+CELL_DATA_SIZE)
+	keySize := uint16(len(key)) 
+	dataOffset := keyOffset + keySize
+	dataSize := uint16(len(data)) 
+	
+	keySize := Endian.Uint16(cell[0:CELL_KEY_SIZE])
+	dataSize := Endian.Uint16(cell[dataSizeOffset:dataSize+CELL_DATA_SIZE])
+	return cell[]
+}
+
 func encodePointerCell(key []byte, pointer PageId) ([]byte, uint16) {
 	keySize := uint16(len(key))
 	cellSize := CELL_KEY_SIZE + CELL_CHILD_POINTER_SIZE + keySize
@@ -337,6 +421,9 @@ func encodePointerCell(key []byte, pointer PageId) ([]byte, uint16) {
 	copy(buffer[CELL_KEY_SIZE+CELL_CHILD_POINTER_SIZE:], key)
 
 	return buffer, cellSize
+}
+
+func decodePointerCell(cell []byte) ([]byte, PageId) {
 }
 
 func (p *Page) getCellPointer(idx int) uint16 {

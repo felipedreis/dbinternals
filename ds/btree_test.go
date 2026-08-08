@@ -154,7 +154,7 @@ func TestBTree_RemoveInRandomOrder(t *testing.T) {
 	}
 }
 
-func removeOneElement(tree *BTree, testKey Key, t *testing.T) {
+func removeOneElement(tree *InMemoryBTree, testKey Key, t *testing.T) {
 	tree.Print()
 	_, error := tree.Remove(testKey)
 
@@ -167,7 +167,7 @@ func removeOneElement(tree *BTree, testKey Key, t *testing.T) {
 	}
 }
 
-func getRandomTree(nodeSize int, elements int) *BTree {
+func getRandomTree(nodeSize int, elements int) *InMemoryBTree {
 	tree := NewBTree(nodeSize)
 	randVals := rand.Perm(elements)
 	for _, i := range randVals {
@@ -187,71 +187,71 @@ func validateTree(node *Node) error {
 		return nil
 	}
 
-	if node.leaf && len(node.child) > 0 {
+	if node.Leaf && len(node.Child) > 0 {
 		return errors.New("Leaf node contain child pointers")
 	}
 
-	if !node.leaf && len(node.values) > 0 {
+	if !node.Leaf && len(node.Values) > 0 {
 		return errors.New("Internal node should not contain values")
 	}
 
-	if !node.leaf  && (node.right != nil || node.left != nil) {
+	if !node.Leaf  && (node.Right != nil || node.Left != nil) {
 		return fmt.Errorf("Internal nodes %v should not have sibblings relationships", node)
 	}
 
-	if !node.leaf &&  len(node.child) != len(node.keys) + 1 {
+	if !node.Leaf &&  len(node.Child) != len(node.Keys) + 1 {
 		return fmt.Errorf("Node %v has %d keys and %d child, which is invalid", 
-			node, len(node.keys), len(node.child))
+			node, len(node.Keys), len(node.Child))
 	}
 
-	for i, key := range node.keys {
+	for i, key := range node.Keys {
 		next := i + 1
 
-		if next < len(node.keys) && key.Compare(node.keys[next]) >= 0 {
+		if next < len(node.Keys) && key.Compare(node.Keys[next]) >= 0 {
 			return fmt.Errorf("Node %v has keys outside of order at position %d,%d", node, i, next)
 			
 		}
 	}
 
-	for i, children := range node.child {
+	for i, children := range node.Child {
 		if children == nil {
 			continue
 		}
-		if children.parent != node {
-			errMsg := fmt.Sprintf("Inconsistent node parent relationship at node keys %v and index %d", children, i)
+		if children.Parent != node {
+			errMsg := fmt.Sprintf("Inconsistent node parent relationship at node.Keys %v and index %d", children, i)
 			return errors.New(errMsg)
 		}
 
-		if children.leaf {
+		if children.Leaf {
 			var prev *Node
 			var next *Node 
 
 			if i > 0 {
-				prev = node.child[i-1] 
+				prev = node.Child[i-1] 
 			} 
 
-			if i < len(node.child)-1 {
-				next = node.child[i + 1]
+			if i < len(node.Child)-1 {
+				next = node.Child[i + 1]
 			}
-			if i == 0 && children.left != nil && children.left.parent == node {
+			if i == 0 && children.Left != nil && children.Left.Parent == node {
 				return fmt.Errorf(`Inconsistent left children at first node %v. Expected nil 
 						or belonging to another parent %v`,
-					children, children.left)
+					children, children.Left)
 			}
 
-			if i == len(node.child)-1 && children.right != nil && children.right.parent == node {
+			if i == len(node.Child)-1 && children.Right != nil && children.Right.Parent == node {
 				return fmt.Errorf("Insconsistent right relation at last node  %v. Expected nil found %v",
-					children, children.right)
+					children, children.Right)
 			}
 
-			if i > 0 && children.left != prev { 
+			if i > 0 && children.Left != prev { 
 				return fmt.Errorf("Insconsistent left relation at node  %v idx %d " +
-				 "children %v left found was %v but expected was %v", node, i, children, prev, children.left)
+				 "children %v left found was %v but expected was %v", node, i, children, prev, children.Left)
 			 }
 			
-			 if i < len(node.child)-1 && children.right != next {
+			 if i < len(node.Child)-1 && children.Right != next {
 				return fmt.Errorf("Insconsistent right relation at node  %v idx %d " + 
-				 "children %v left found was %v but expected was %v", node, i, children, next, children.right)
+				 "children %v left found was %v but expected was %v", node, i, children, next, children.Right)
 			}
 		} 
 
