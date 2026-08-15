@@ -9,7 +9,7 @@ const NoPage NodeId = 0
 type BTNode interface {
 	GetId() NodeId 
 	GetParent() NodeId 
-	SetParent(BTNode)
+	SetParent(NodeId)
 	GetSibblings() (NodeId, NodeId)
 	SetLeftSibbling(NodeId)
 	SetRightSibbling(NodeId)
@@ -17,14 +17,13 @@ type BTNode interface {
 	Search(Key) (int, bool)
 	InsertValueAt(int, Key, Value)
 	InsertNodeAt(int, Key, NodeId)
-	GetValueAt(int) Value
-	GetNodeAt(int) NodeId
+	GetValueAt(int) (Key, Value)
+	GetNodeAt(int) (Key, NodeId)
 	IsAt(int,Key) bool
 	Remove(int) Value
 	IsLeaf() bool
 	NumKeys() int 
 	GetKeyAt(int) Key
-	GetChildAt(int) NodeId
 	
 	IsOverflow() bool
 	IsUnderflow() bool

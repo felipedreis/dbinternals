@@ -89,11 +89,40 @@ func (t *PagedBTree) Remove(key Key) (Value, error)  {
 func (t *PagedBTree) checkUnderflow(underflowList []BTNode) {
 	
 	for it, node := range underflowList {
-		if it == len(underflowList) - 1 {
+		if it == len(underflowList) - 1 || !node.IsUnderflow() {
 			break 
 		}
 
 		parent := underflowList[it + 1] 
+		
+		nodeIdx, left, right := getSibblings(node, parent)
+
+		if leftNode != nil && !leftNode.IsUnderflow() {
+			if node.IsLeaf() {
+				key, value := leftNode.GetValueAt(leftNode.NumKeys() - 1)
+				node.InsertValueAt(0, key, value)
+				leftNode.Remove(leftNode.NumKeys() - 1)
+
+				t.nodeProvider.Release(node.GetId(), true)
+				t.nodeProvider.Release(leftNode.GetId(), true)
+			} else {
+				key, childNodeId := leftNode.GetNodeAt(leftNode.NumKeys() - 1)
+				leftNode.Remove(leftNode.NumKeys() - 1)
+				childNode := t.nodeProvider.GetNode(childNodeId)
+				
+				node.InsertNodeAt(0, key, childNodeId)
+				childNode.SetParent(node.GetId())
+			}
+		} else if rightNode != nil && !rightNode.IsUnderflow() {
+		}
+	}
+}
+
+
+func getSibblings(node BTNode, parent BTNode) (int, NodeId, NodeId) {
+	var left NodeId
+	var right NodeId
+	
 		sepKeyIdx, _ := parent.Search(node.GetKeyAt(0))
 		
 		var leftNode, rightNode BTNode
@@ -103,14 +132,10 @@ func (t *PagedBTree) checkUnderflow(underflowList []BTNode) {
 		if sepKeyIdx < parent.NumKeys() {
 			rightNode = t.nodeProvider.GetNode(parent.GetChildAt(sepKeyIdx + 1))
 		}
-
-
-
-	}
-
 }
 
 func (t *PagedBTree) Find(key Key) (Value, error){
+	return Value{}, fmt.Errorf("not implemented")
 } 
 
 func (t *PagedBTree) find(key Key) (int, []BTNode) {
