@@ -20,6 +20,7 @@ type BTNode interface {
 	GetValueAt(int) (Key, Value)
 	GetNodeAt(int) (Key, NodeId)
 	IsAt(int,Key) bool
+	SetKeyAt(int, Key) 
 	Remove(int) Value
 	IsLeaf() bool
 	NumKeys() int 
@@ -27,7 +28,8 @@ type BTNode interface {
 	
 	IsOverflow() bool
 	IsUnderflow() bool
-	Merge(BTNode)
+	MergeLeaf(BTNode)
+	MergeInternal(BTNode, Key)
 	Split(BTNode) Key
 }
 
