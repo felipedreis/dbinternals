@@ -60,6 +60,11 @@ type BTNode interface {
 	Split(BTNode) Key
 }
 
+type FileManager interface {
+	Init(string) 
+	Write(int,BTNode)
+	Read(int)BTNode
+}
 
 type BTNodeProvider interface {
 	GetNewNode() BTNode
@@ -70,6 +75,7 @@ type BTNodeProvider interface {
 
 type Key interface {
 	fmt.Stringer
+	Bytes() []byte
 	Compare(other Key) int
 }
 
@@ -82,4 +88,5 @@ type BTree interface {
 	Remove(Key) (Value, error)  
 	Find(Key) (Value, error)
 }
+
 
