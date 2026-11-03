@@ -6,6 +6,9 @@ type PagedNode struct {
 }
 
 
+func MakePagedNode(id NodeId, leaf bool) PagedNode {
+	return PagedNode{id: NodeId(id), page: MakePage(PageId(id), leaf)}
+}
 
 func (pn *PagedNode) Init(key Key, left NodeId, right NodeId)  {
 	pn.page.SetLeftChild(PageId(left))
@@ -41,71 +44,84 @@ func (pn *PagedNode) InsertValueAt(idx int, key Key, value Value){
 	pn.page.PutKeyValue(idx, key.Bytes(), value.v)
 }
 func (pn *PagedNode) InsertNodeAt(int, Key, NodeId){
-	return nil
 }
 func (pn *PagedNode) AppendNode(Key, NodeId){
-	return nil
 }
 func (pn *PagedNode) PrependNode(Key, NodeId){
-	return nil
 }
 func (pn *PagedNode) GetNodeAt(int) (Key, NodeId){
-	return nil
+	return nil, 0
 }
+
 func (pn *PagedNode) GetFirstNode() (Key, NodeId){
-	return nil
+	return nil, 0
 }
+
 func (pn *PagedNode) GetLastNode() (Key, NodeId){
-	return nil
+	return nil, 0
 }
+
 func (pn *PagedNode) RemoveFirstNode() (Key, NodeId){
-	return nil
+	return nil, 0 
 }
+
 func (pn *PagedNode) RemoveLastNode() (Key, NodeId){
-	return nil
+	return nil, 0 
 }
+
 func (pn *PagedNode) RemoveNode(int, side) (Key, NodeId){
-	return nil
+	return nil, 0
 }
+
 func (pn *PagedNode) GetValueAt(int) (Key, Value){
-	return nil
+	return nil, Value{}
 }
+
 func (pn *PagedNode) IsAt(int,Key) bool{
-	return nil
+	return false
 }
+
 func (pn *PagedNode) SetKeyAt(int, Key){
-	return nil
 }
+
 func (pn *PagedNode) RemoveValue(int) (Key, Value){
-	return nil
+	return nil, Value{}
 }
+
 func (pn *PagedNode) IsLeaf() bool{
-	return nil
+	return false
 }
+
 func (pn *PagedNode) NumKeys() int {
-	return nil
+	return 0
 }
+
 func (pn *PagedNode) GetKeyAt(int) Key{
 	return nil
 }
+
 func (pn *PagedNode) IsOverflow() bool{
-	return nil
+	return false
 }
+
 func (pn *PagedNode) IsUnderflow() bool{
-	return nil
+	return false 
 }
+
 func (pn *PagedNode) CanMergeLeaf(BTNode) bool{
-	return nil
+	return  false
 }
+
 func (pn *PagedNode) MergeLeaf(BTNode, side){
-	return nil
 }
+
 func (pn *PagedNode) CanMergeInternal(BTNode, Key) bool{
-	return nil
+	return false
 }
+
 func (pn *PagedNode) MergeInternal(BTNode, Key, side){
-	return nil
 }
+
 func (pn *PagedNode) Split(BTNode) Key{
 	return nil
 }

@@ -1,28 +1,31 @@
 package backend
 
-
+import (
+	"log"
+)
 
 type PageBuffer struct {
-	nodes    map[NodeId]*BTNode
+	nodes    map[NodeId]PagedNode
 	pins     map[NodeId]int
 	dead     map[NodeId]bool
 	nextId   NodeId
+	fileManager FileManager
 }
 
 func NewPageBuffer(fileManager FileManager) *PageBuffer {
 	return &PageBuffer{
-		nodeSize: nodeSize,
-		nodes:    make(map[NodeId]*fakeNode),
+		nodes:    make(map[NodeId]PagedNode),
 		pins:     make(map[NodeId]int),
 		dead:     make(map[NodeId]bool),
+		fileManager: fileManager,
 		nextId:   1,
 	}
 }
 
-func (p *fakeNodeProvider) newNode(leaf bool) *fakeNode {
+func (p *PageBuffer) newNode(leaf bool) BTNode {
 	id := p.nextId
 	p.nextId++
-	n := &fakeNode{id: id, leaf: leaf, maxKeys: p.nodeSize, minKeys: p.minKeys()}
+	n := MakePagedNode(id, leaf)
 	p.nodes[id] = n
 	return n
 }
@@ -32,23 +35,24 @@ func (p *fakeNodeProvider) newNode(leaf bool) *fakeNode {
 // Tombstone) once they're done. newNode itself stays unpinned, since test
 // fixtures also call it directly to hand-build trees without going through
 // that pinned-allocation path.
-func (p *fakeNodeProvider) GetNewNode() BTNode {
+func (p *PageBuffer) GetNewNode() BTNode {
 	n := p.newNode(true)
-	p.pins[n.id] = 1
+	p.pins[n.GetId()] = 1
 	return n
 }
 
-func (p *fakeNodeProvider) GetNode(id NodeId) BTNode {
+func (p *PageBuffer) GetNode(id NodeId) BTNode {
 	if id == NoPage {
-		return nil
-	}
-	if p.dead[id] {
-		p.errorf("GetNode called on tombstoned node %d", id)
 		return nil
 	}
 	n, ok := p.nodes[id]
 	if !ok {
-		p.errorf("GetNode called on unknown node %d", id)
+		n = p.fileManager.Read(NodeId(id))
+		if n.page.IsToombstoned() {
+			log.Printf("GetNode called on tombstoned node %d", id)
+			return nil
+		}
+		log.Printf("GetNode called on unknown node %d\n", id)
 		return nil
 	}
 	p.pins[id]++
@@ -80,29 +84,4 @@ func (p *fakeNodeProvider) Tombstone(id NodeId) {
 	p.dead[id] = true
 }
 
-func (p *fakeNodeProvider) errorf(format string, args ...any) {
-	p.errors = append(p.errors, fmt.Sprintf(format, args...))
-}
-
-// AssertClean fails the test if any provider misuse was recorded (double
-// release, use-after-tombstone, ...) or any node still has an outstanding
-// pin (leaked without Release/Tombstone).
-func (p *fakeNodeProvider) AssertClean(t *testing.T) {
-	t.Helper()
-	for _, msg := range p.errors {
-		t.Errorf("node provider misuse: %s", msg)
-	}
-	for id, count := range p.pins {
-		if count != 0 {
-			t.Errorf("node %d has %d outstanding pin(s) — leaked without Release/Tombstone", id, count)
-		}
-	}
-}
-
-type fakeMasterPage struct {
-	root NodeId
-}
-
-func (m *fakeMasterPage) GetRootNode() NodeId   { return m.root }
-func (m *fakeMasterPage) SetRootNode(id NodeId) { m.root = id }
 

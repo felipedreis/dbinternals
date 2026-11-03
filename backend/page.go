@@ -17,6 +17,7 @@ const (
 	PAGE_TYPE
 	PAGE_HAS_OVERFLOW
 	PAGE_IS_OVERFLOW
+	PAGE_TOOMBSTONED
 )
 
 var Endian = binary.BigEndian
@@ -102,52 +103,56 @@ func (p *Page) SetData(data []byte) {
 	copy(p.data, data)
 }
 
+func (p *Page) readFlag(flag PageFlag) bool {
+	return p.data[PAGE_HEADER_FLAGS]&(1<<flag) != 0
+}
+
+func (p *Page) setFlag(flag PageFlag, v bool) {
+	if v {
+		p.data[PAGE_HEADER_FLAGS] |= (1 << flag)
+	} else {
+		p.data[PAGE_HEADER_FLAGS] &= ^byte(1 << flag)
+	}
+}
+
 func (p *Page) IsLeaf() bool {
-	return p.data[PAGE_HEADER_FLAGS]&(1<<PAGE_TYPE) != 0
+	return p.readFlag(PAGE_TYPE) 
 }
 
 func (p *Page) IsRoot() bool {
-	return p.data[PAGE_HEADER_FLAGS]&(1<<PAGE_ROOT) != 0
+	return p.readFlag(PAGE_ROOT) 
 }
 
 func (p *Page) HasOverflow() bool {
-	return p.data[PAGE_HEADER_FLAGS]&(1<<PAGE_HAS_OVERFLOW) != 0
+	return p.readFlag(PAGE_HAS_OVERFLOW)
 }
 
 func (p *Page) IsOverflow() bool {
-	return p.data[PAGE_HEADER_FLAGS]&(1<<PAGE_IS_OVERFLOW) != 0
+	return p.readFlag(PAGE_IS_OVERFLOW)
+}
+
+func (p *Page) IsToombstoned() bool {
+	return p.readFlag(PAGE_TOOMBSTONED)
 }
 
 func (p *Page) SetRoot(root bool) {
-	if root {
-		p.data[PAGE_HEADER_FLAGS] |= (1 << PAGE_ROOT)
-	} else {
-		p.data[PAGE_HEADER_FLAGS] &= ^byte(1 << PAGE_ROOT)
-	}
+	p.setFlag(PAGE_ROOT, root)
 }
 
 func (p *Page) SetLeaf(leaf bool) {
-	if leaf {
-		p.data[PAGE_HEADER_FLAGS] |= (1 << PAGE_TYPE)
-	} else {
-		p.data[PAGE_HEADER_FLAGS] &= ^byte(1 << PAGE_TYPE)
-	}
+	p.setFlag(PAGE_TYPE, leaf)
 }
 
 func (p *Page) SetHasOverflow(hasOverflow bool) {
-	if hasOverflow {
-		p.data[PAGE_HEADER_FLAGS] |= (1 << PAGE_HAS_OVERFLOW)
-	} else {
-		p.data[PAGE_HEADER_FLAGS] &= ^byte(1 << PAGE_HAS_OVERFLOW)
-	}
+	p.setFlag(PAGE_HAS_OVERFLOW, hasOverflow)
 }
 
 func (p *Page) SetIsOverflow(isOverflow bool) {
-	if isOverflow {
-		p.data[PAGE_HEADER_FLAGS] |= (1 << PAGE_IS_OVERFLOW)
-	} else {
-		p.data[PAGE_HEADER_FLAGS] &= ^byte(1 << PAGE_IS_OVERFLOW)
-	}
+	p.setFlag(PAGE_IS_OVERFLOW, isOverflow)
+}
+
+func (p *Page) SetToombstone(toombstoned bool) {
+	p.setFlag(PAGE_TOOMBSTONED, toombstoned)
 }
 
 func (p *Page) GetPageVersion() int {
