@@ -45,43 +45,55 @@ func (p *PageBuffer) GetNode(id NodeId) BTNode {
 	if id == NoPage {
 		return nil
 	}
+
+	if p.dead[id] {
+		log.Printf("GetNode called on tombstoned node %d\n", id)
+		return nil
+	}
+
 	n, ok := p.nodes[id]
 	if !ok {
 		n = p.fileManager.Read(NodeId(id))
 		if n.page.IsToombstoned() {
-			log.Printf("GetNode called on tombstoned node %d", id)
+			log.Printf("GetNode called on tombstoned node %d\n", id)
+			p.dead[id] = true
 			return nil
 		}
-		log.Printf("GetNode called on unknown node %d\n", id)
-		return nil
+
+		p.nodes[id] = n
 	}
+
 	p.pins[id]++
 	return n
 }
 
-func (p *fakeNodeProvider) Release(id NodeId, dirty bool) {
+func (p *PageBuffer) Release(id NodeId, dirty bool) {
 	if p.dead[id] {
-		p.errorf("Release called on tombstoned node %d", id)
+		log.Printf("Release called on tombstoned node %d\n", id)
 		return
 	}
 	if p.pins[id] <= 0 {
-		p.errorf("Release called on node %d with no outstanding pin (double release?)", id)
+		log.Printf("Release called on node %d with no outstanding pin (double release?)", id)
 		return
 	}
 	p.pins[id]--
 }
 
-func (p *fakeNodeProvider) Tombstone(id NodeId) {
+func (p *PageBuffer) Tombstone(id NodeId) {
 	if p.dead[id] {
-		p.errorf("Tombstone called twice on node %d", id)
+		log.Printf("Tombstone called twice on node %d\n", id)
 		return
 	}
 	if p.pins[id] <= 0 {
-		p.errorf("Tombstone called on node %d with no outstanding pin", id)
+		log.Printf("Tombstone called on node %d with no outstanding pin\n", id)
 	} else {
 		p.pins[id]--
 	}
+
 	p.dead[id] = true
+	n := p.nodes[id]
+
+	n.page.SetToombstone(true)
 }
 
 

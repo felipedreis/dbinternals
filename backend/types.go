@@ -46,7 +46,9 @@ type BTNode interface {
 	GetValueAt(int) (Key, Value)
 	IsAt(int,Key) bool
 	SetKeyAt(int, Key)
+	AppendValue(Key, Value)
 	RemoveValue(int) (Key, Value)
+	
 	IsLeaf() bool
 	NumKeys() int 
 	GetKeyAt(int) Key
@@ -63,7 +65,7 @@ type BTNode interface {
 type FileManager interface {
 	Init(string) 
 	Write(int,BTNode)
-	Read(int)BTNode
+	Read(NodeId)BTNode
 }
 
 type BTNodeProvider interface {
@@ -77,6 +79,7 @@ type Key interface {
 	fmt.Stringer
 	Bytes() []byte
 	Compare(other Key) int
+	Size() uint16
 }
 
 type Value struct {
