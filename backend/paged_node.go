@@ -130,27 +130,50 @@ func (pn *PagedNode) CanMergeInternal(node BTNode, sepKey Key) bool{
 }
 
 func (pn *PagedNode) MergeInternal(node BTNode, key Key, s side){
+	paged := node.(*PagedNode)
+	if s == left {
+		_, nodeId := pn.GetFirstNode()
+		pn.PrependNode(key, nodeId)
+		for i := node.NumKeys() - 1; i >= 0; i++ {
+			key, nodeId := paged.GetNodeAt(i)
+			pn.PrependNode(key, nodeId)
+		}
+	} else {
+		pn.AppendNode(key, NodeId(paged.page.GetLeftChild()))
+		for i := 0; i < node.NumKeys(); i++ {
+			key, nodeId := paged.GetNodeAt(i)
+			pn.AppendNode(key, nodeId)
+		}
+	}
 }
 
 func (pn *PagedNode) Split(node BTNode) Key{
 	numKeys := pn.NumKeys() 
 	paged := asPagedNode(node)
 	size := pn.page.GetDataSize()
+	var sepKey Key = nil
 
 	if pn.IsLeaf() {
-		for i := numKeys - 1; i >= 0 && paged.page.GetDataSize() < size/2 ; i-- {
-			key := pn.GetKeyAt(i)
-			value := pn.page.GetValueAt(i)
-			node.AppendValue(key, Value{v: value})
+		for i := numKeys - 1; i >= 0 && pn.page.GetDataSize() > size/2 ; i-- {
+			key, value := pn.RemoveValue(i)
+			node.AppendValue(key, value)
+			sepKey = key
 		}
-
-		
-	
 	} else {
+		for i := numKeys - 1; i >= 0 && pn.page.GetDataSize() > size/2; i-- {
+			key, nodeId := pn.RemoveNode(i, right)
+			
+			if pn.page.GetDataSize() <= size/2 {
+				paged.page.SetLeftChild(PageId(nodeId))
+				sepKey = key
+			} else {
+				node.AppendNode(key, nodeId)
+			}
+		}
 
 	}
 
-	return nil
+	return sepKey
 }
 
 func asPagedNode(btNode BTNode) *PagedNode {
